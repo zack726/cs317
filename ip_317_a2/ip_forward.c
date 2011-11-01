@@ -48,7 +48,6 @@ void readIpv4(const char* fname, ForwardingTable* ft, NICTable* nt){
     bool isFirstLine = true;
     
     while(fgets(linbuf, STDSTRBUFSIZ, fileptr) != NULL ){
-        printf("%s", linbuf);
         if(isFirstLine){
             initializeNIC(nt, atoi(linbuf));
             isFirstLine = false;
@@ -74,10 +73,7 @@ void readIpv4(const char* fname, ForwardingTable* ft, NICTable* nt){
     free(linbuf);
 }
 
-void insertIntoFT(ForwardingTable* ft, NICTable* nt, IPAddress* ip, uint32_t nic){
-    print_ip_prefix(ip); 
-    printf("inserted into FT with NIC: %i\n\n", nic);
-    
+void insertIntoFT(ForwardingTable* ft, NICTable* nt, IPAddress* ip, uint32_t nic){    
     FTEntry* fte = (FTEntry*)malloc(sizeof(FTEntry));
     fte->ip = ip;
     NICEntry* curr_ne = nt->head;
@@ -109,14 +105,6 @@ void insertIntoFT(ForwardingTable* ft, NICTable* nt, IPAddress* ip, uint32_t nic
         fte->next = NULL;
     }
     ft->numentries++;
-    FTEntry* curr2 = ft->head;
-    printf("{");
-    for(int i=0; i<ft->numentries; i++){
-        curr2 = curr2->next;
-        print_ip_prefix(curr2->ip);
-        printf("NIC: %i, ", curr2->nic->nic);
-    }
-    printf("}\n\n");
 }
 
 ForwardingTable* constructFT(void){
@@ -248,7 +236,6 @@ int ipcmp_host(IPAddress* host, IPAddress* ip_from_fte){ //host vs forward table
     iptoformat = iptoformat&mask;
     IPAddress* tmphost = uinttoip(iptoformat);
     tmphost->prefix_len = prefix_len;
-//    printf("IP: "); print_ip_host(host); printf("was converted to: "); print_ip_prefix(tmphost); printf("and is being compared to: "); print_ip_prefix(ip_from_fte); printf("\n");
     return ipcmp_prefix(tmphost, ip_from_fte);
 }
 
