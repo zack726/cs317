@@ -43,18 +43,11 @@ void readIpv4(const char* fname, ForwardingTable* ft, NICTable* nt){
         exit(1);
     }
     char* linbuf = (char*)malloc(sizeof(char)*STDSTRBUFSIZ);
-//    char* dbuf = (char*)malloc(sizeof(char)*STDSTRBUFSIZ);
     IPAddress* tmpip = (IPAddress*)malloc(sizeof(IPAddress));
-//    uint32_t dbufi=0;
     uint32_t nic_or_id = -1;
-    char line_type;
-//    uint32_t tmpint;
-    ParsedDataType pdt = LINETYPE;
     bool isFirstLine = true;
-//    bool isInitOrUpdate = true;
     
     while(fgets(linbuf, STDSTRBUFSIZ, fileptr) != NULL ){
-        pdt=LINETYPE;
         printf("%s", linbuf);
         if(isFirstLine){
             initializeNIC(nt, atoi(linbuf));
@@ -63,103 +56,28 @@ void readIpv4(const char* fname, ForwardingTable* ft, NICTable* nt){
         else{
             char ignore;
             if(linbuf[0] == 'T'){
-                line_type = TABLEINSERT;
                 sscanf(linbuf, "%c %d.%d.%d.%d/%d %d", &ignore, (int*)&tmpip->first8, (int*)&tmpip->second8, (int*)&tmpip->third8, (int*)&tmpip->fourth8, (int*)&tmpip->prefix_len, &nic_or_id);
-            }
-            else if(linbuf[0] == 'P'){
-                line_type = PACKET;
-                sscanf(linbuf, "%c %d.%d.%d.%d %d", &ignore, (int*)&tmpip->first8, (int*)&tmpip->second8, (int*)&tmpip->third8, (int*)&tmpip->fourth8, &nic_or_id);
-            }
-            else if(linbuf[0] == 'U'){
-                line_type = TABLEUPDATE;
-                
-            }
-            print_ip_prefix(tmpip);
-            printf("\n");
-//            free(dbuf);
-//            dbuf = (char*)malloc(sizeof(char)*STDSTRBUFSIZ);
-//            dbufi=0;
-//            for(uint32_t i=0; i < STDSTRBUFSIZ; i++){
-//                if(linbuf[i]==' ' || linbuf[i]=='.' || linbuf[i]=='\n' || linbuf[i]=='/' || (linbuf[i]=='\r' && linbuf[i+1]=='\n')){
-//                    tmpint = strtoul(dbuf, NULL, 0);
-//                    if(pdt == LINETYPE){
-//                        pdt++;
-//                        line_type = dbuf[0];
-//                        if(dbuf[0] == TABLEINSERT || dbuf[0] == TABLEUPDATE){
-//                            isInitOrUpdate = true;
-//                        }
-//                        else if(dbuf[0] == PACKET){
-//                            isInitOrUpdate = false;
-//                        }
-//                        else{
-//                            perror("Unknown value of dbuf[0]");
-//                        }
-//                    }
-//                    else if(pdt == FIRSTIPPART){
-//                        pdt++;
-//                        tmpip->first8 = (uint8_t)tmpint;
-//                    }
-//                    else if(pdt == SECONDIPPART){
-//                        pdt++;
-//                        tmpip->second8 = (uint8_t)tmpint;
-//                    }
-//                    else if(pdt == THIRDIPPART){
-//                        pdt++;
-//                        tmpip->third8 = (uint8_t)tmpint;
-//                    }
-//                    else if(pdt == FOURTHIPPART){
-//                        pdt++;
-//                        tmpip->fourth8 = (uint8_t)tmpint;
-//                    }
-//                    else if(pdt == PREFIXLEN){
-//                        if(isInitOrUpdate){ //if is init or update, read prefixlen. 
-//                            pdt++;
-//                            tmpip->prefix_len = (uint8_t)tmpint;
-//                        }
-//                        else{ //else read packet id
-//                            nic_or_id = tmpint;
-//                            break;
-//                        }
-//                    }
-//                    else if(pdt == NICORID){
-//                        nic_or_id = tmpint;
-//                        pdt=LINETYPE; //wrap back around, next line
-//                        break;
-//                    }
-//                    else{
-//                        perror("Line parsing error: unknown ParsedDataType/pdt");
-//                    }
-//                    free(dbuf);
-//                    dbuf = (char*)malloc(sizeof(char)*STDSTRBUFSIZ);
-//                    dbufi=0;
-//                }
-//                else{
-//                    dbuf[dbufi++] = linbuf[i];
-//                }
-//            }
-            if(line_type == TABLEINSERT){
                 insertIntoFT(ft, nt, tmpip, nic_or_id);
             }
-            else if(line_type == TABLEUPDATE){
-                
-            }
-            else if(line_type == PACKET){
+            else if(linbuf[0] == 'P'){
+                sscanf(linbuf, "%c %d.%d.%d.%d %d", &ignore, (int*)&tmpip->first8, (int*)&tmpip->second8, (int*)&tmpip->third8, (int*)&tmpip->fourth8, &nic_or_id);
                 routePacket(ft, nt, tmpip, nic_or_id);
             }
-            else{
-                perror("Unknown line type");
-            }                
+            else if(linbuf[0] == 'U'){
+
+            }
         }
-        fflush(stdout);
         nic_or_id = -1;
         tmpip = (IPAddress*)malloc(sizeof(IPAddress));
     }
     fclose(fileptr);
-//    free(linbuf);
-//    free(dbuf);
+    free(linbuf);
 }
 
 void insertIntoFT(ForwardingTable* ft, NICTable* nt, IPAddress* ip, uint32_t nic){
+    print_ip_prefix(ip); 
+    printf("inserted into FT with NIC: %i\n\n", nic);
+    
     FTEntry* fte = (FTEntry*)malloc(sizeof(FTEntry));
     fte->ip = ip;
     NICEntry* curr_ne = nt->head;
@@ -191,7 +109,14 @@ void insertIntoFT(ForwardingTable* ft, NICTable* nt, IPAddress* ip, uint32_t nic
         fte->next = NULL;
     }
     ft->numentries++;
-
+    FTEntry* curr2 = ft->head;
+    printf("{");
+    for(int i=0; i<ft->numentries; i++){
+        curr2 = curr2->next;
+        print_ip_prefix(curr2->ip);
+        printf("NIC: %i, ", curr2->nic->nic);
+    }
+    printf("}\n\n");
 }
 
 ForwardingTable* constructFT(void){

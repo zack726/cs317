@@ -20,16 +20,10 @@
 
 #define UNREACHABLE_HOST 1000
 #define STDSTRBUFSIZ 255
-#define OVERFLOWSTRBUFSIZ 1024*1024*255
-#define TABLEINSERT 'T'
-#define TABLEUPDATE 'U'
-#define PACKET 'P'
+#define OVERFLOWSTRBUFSIZ 1024*255
 #define IPADRLEN 32
 
 typedef unsigned char byte;
-
-typedef enum ParsedDataType{LINETYPE, FIRSTIPPART, SECONDIPPART, 
-    THIRDIPPART, FOURTHIPPART, PREFIXLEN, NICORID}ParsedDataType;
 
 typedef struct NICEntry{
     uint32_t nic;
