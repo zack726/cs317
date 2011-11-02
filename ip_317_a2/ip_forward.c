@@ -23,15 +23,16 @@ int main(int argc, const char* argv[]){
     ForwardingTable* ft = constructFT();
     NICTable* nt = constructNT();
     readIpv4(argv[1], ft, nt);
-    
-    printf("Packet Loss: %f, Forwarded: %f, Dropped: %f", dropped/forwarded, forwarded, dropped);
-    
+    printf("\n");    
     FTEntry* curr = ft->head;
     for(int i=0; i<ft->numentries; i++){
         curr = curr->next;
         printf("%i.%i.%i.%i/%i %i\n", curr->ip->first8, curr->ip->second8, curr->ip->third8, curr->ip->fourth8, curr->ip->prefix_len, curr->nic->nic);
         fflush(stdout);
     }
+    
+    printf("Packet Loss: %f, Forwarded: %f, Dropped: %f", dropped/forwarded, forwarded, dropped);
+
     return 0;
 }
 
@@ -42,8 +43,8 @@ void readIpv4(const char* fname, ForwardingTable* ft, NICTable* nt){
         perror("Unable to open file");
         exit(1);
     }
-    char* linbuf = (char*)malloc(sizeof(char)*STDSTRBUFSIZ);
-    IPAddress* tmpip = (IPAddress*)malloc(sizeof(IPAddress));
+    char* linbuf = (char*)malloc(sizeof(char)*STDSTRBUFSIZ); //MEMUSG: this line buffer is reused by every loop iteration and freed at then end of this function
+    IPAddress* tmpip = (IPAddress*)malloc(sizeof(IPAddress)); //MEMUSG: need space for ip allocated for each iteration of this while loop
     uint32_t nic_or_id = -1;
     bool isFirstLine = true;
     
@@ -61,20 +62,22 @@ void readIpv4(const char* fname, ForwardingTable* ft, NICTable* nt){
             else if(linbuf[0] == 'P'){
                 sscanf(linbuf, "%c %d.%d.%d.%d %d", &ignore, (int*)&tmpip->first8, (int*)&tmpip->second8, (int*)&tmpip->third8, (int*)&tmpip->fourth8, &nic_or_id);
                 routePacket(ft, nt, tmpip, nic_or_id);
+                //after packet is routed, we have no need of it's tmpip memory anymore
+                free(tmpip);
             }
             else if(linbuf[0] == 'U'){
 
             }
         }
         nic_or_id = -1;
-        tmpip = (IPAddress*)malloc(sizeof(IPAddress));
+        tmpip = (IPAddress*)malloc(sizeof(IPAddress)); //MEMUSG: since tmpip will either have been freed (in the case of a packet) or needs to be used (if ft entry), we alloc again.
     }
     fclose(fileptr);
     free(linbuf);
 }
 
 void insertIntoFT(ForwardingTable* ft, NICTable* nt, IPAddress* ip, uint32_t nic){    
-    FTEntry* fte = (FTEntry*)malloc(sizeof(FTEntry));
+    FTEntry* fte = (FTEntry*)malloc(sizeof(FTEntry)); //MEMUSG: need space for each new fte into table - each call to this function
     fte->ip = ip;
     NICEntry* curr_ne = nt->head;
     for(int i=0; i<nt->numentries; i++){
@@ -95,6 +98,7 @@ void insertIntoFT(ForwardingTable* ft, NICTable* nt, IPAddress* ip, uint32_t nic
             curr->prev = fte;
             fte->prev = old_prev;
             fte->next = curr;
+            curr = fte; //ensure the if curr->next==null condition 4 lines below not met
             break;
         }
     }
@@ -108,16 +112,16 @@ void insertIntoFT(ForwardingTable* ft, NICTable* nt, IPAddress* ip, uint32_t nic
 }
 
 ForwardingTable* constructFT(void){
-    ForwardingTable* ft = (ForwardingTable*)malloc(sizeof(ForwardingTable));
-    ft->head = (FTEntry*)malloc(sizeof(FTEntry)); //dummy header node
+    ForwardingTable* ft = (ForwardingTable*)malloc(sizeof(ForwardingTable)); //MEMUSG: space for forwarding table metadata
+    ft->head = (FTEntry*)malloc(sizeof(FTEntry)); //MEMUSG: dummy header node
     ft->tail = ft->head;
     ft->numentries=0;  
     return ft;
 }
 
 NICTable* constructNT(void){
-    NICTable* nt = (NICTable*)malloc(sizeof(NICTable));
-    nt->head = (NICEntry*)malloc(sizeof(NICEntry)); //dummy header node
+    NICTable* nt = (NICTable*)malloc(sizeof(NICTable)); //MEMUSG: space for NIC table metadata
+    nt->head = (NICEntry*)malloc(sizeof(NICEntry)); //MEMUSG: dummy header node
     nt->tail = nt->head;
     nt->numentries=0;  
     return nt;
@@ -125,7 +129,7 @@ NICTable* constructNT(void){
 
 void initializeNIC(NICTable* nt, uint32_t numentries){
     for(int32_t i=0; i<numentries; i++){
-        NICEntry* ne = (NICEntry*)malloc(sizeof(NICEntry));
+        NICEntry* ne = (NICEntry*)malloc(sizeof(NICEntry)); //MEMUSG: space for each entry in the NIC data structure
         ne->nic = i;
         NICEntry* tmptail = nt->tail;   //get ptr to current tail  
         tmptail->next = ne;             //set that node's next pointer to point to the newly inserted entry
@@ -150,8 +154,8 @@ FTEntry* findEntryByIp(ForwardingTable* ft, IPAddress* ip){
         int8_t ipcmp = ipcmp_host(ip, curr->ip);
         if(ipcmp == 0){                                      //if this forwarding table entry matches the given ip
             if(curr->next != NULL && ipcmp_host(ip, curr->next->ip) == 0){      //check the next one. if it exists, and also matches, 
-                                                                                //then it will be a better match (192.168.0.0/16 comes before 192.168.0.0/24)
-                continue;                                                       //so we continue
+                                                                                //then it will be a better match (ex. 192.168.0.0/16 comes before 192.168.0.0/24)
+                continue;                                                       //so we continue 
             }               
             else{                                                               //otherwise this IS the longest prefix match, use it.
                 found_fte = curr;
@@ -166,16 +170,15 @@ FTEntry* findEntryByIp(ForwardingTable* ft, IPAddress* ip){
 }
 
 void routePacket(ForwardingTable* ft, NICTable* nt, IPAddress* ip, uint32_t packetid){  
-    printf("PACKETID: %i packet loss %f\n", packetid, (dropped/(forwarded+dropped)));
-    fflush(stdout);
+//    printf("PACKETID: %i packet loss %f\n", packetid, (dropped/(forwarded+dropped)));
+//    fflush(stdout);
     FTEntry* fte = findEntryByIp(ft, ip);
     if(fte == NULL){
-        printf("O %i.%i.%i.%i -1\n", ip->first8, ip->second8, ip->third8, ip->fourth8);
+        printf("O %i -1\n", packetid);
         dropped++;
     }
     else{
-        NICEntry* nice = fte->nic;
-        printf("O %i.%i.%i.%i %i\n", ip->first8, ip->second8, ip->third8, ip->fourth8, nice->nic);   
+        printf("O %i %i\n", packetid, fte->nic->nic);   
         forwarded++;
     }
 }
@@ -202,8 +205,9 @@ int ipcmp_prefix(IPAddress* ipOne, IPAddress* ipTwo){
     }
 }
 /*
- * Similar to ipcmp_prefix, but takes a host ip and masks it to match the
- * forwarding table entry for comparison
+ * Wrapper for ipcmp_prefix, masks out bits not used by prefix 
+ * (aka if prefix length = k, masks out 32-k rightmost bits) then calls
+ * ipcmp_prefix
  *
  */
 int ipcmp_host(IPAddress* host, IPAddress* ip_from_fte){ //host vs forward table entry
@@ -212,21 +216,14 @@ int ipcmp_host(IPAddress* host, IPAddress* ip_from_fte){ //host vs forward table
     for(int i=0; i<prefix_len; i++){
         mask+=pow(2, i);
     }
-    mask = (mask<<(32-prefix_len));
-    printf("Prefix_len: %u mask: %u\n", prefix_len, mask);
-    
+    mask = (mask<<(32-prefix_len));    
     uint32_t iptoformat = iptouint(host);
     iptoformat = iptoformat&mask;
-    IPAddress* tmphost = uinttoip(iptoformat);
-    tmphost->prefix_len = prefix_len;
-    printf("Comparing fte: ");
-    print_ip_prefix(ip_from_fte);
-    printf("with");
-    print_ip_host(host);
-    printf("masked as");
-    print_ip_prefix(tmphost);
-    printf("\n");
-    return ipcmp_prefix(tmphost, ip_from_fte);
+    IPAddress* _tmphost = uinttoip(iptoformat);
+    _tmphost->prefix_len = prefix_len;
+    uint32_t ipcmp_prefix_result = ipcmp_prefix(_tmphost, ip_from_fte);
+    free(_tmphost); //MEMUSG FREEME1 freed
+    return ipcmp_prefix_result;
 }
 
 uint32_t iptouint(IPAddress* ip){
@@ -238,7 +235,7 @@ uint32_t iptouint(IPAddress* ip){
     return ipasuint;
 }
 IPAddress* uinttoip(uint32_t uint){
-    IPAddress* ip = (IPAddress*)malloc(sizeof(IPAddress));
+    IPAddress* ip = (IPAddress*)malloc(sizeof(IPAddress)); //MEMUSG: FREEME1 as these are generally temporary objects, they should be tracked and probably deleted
     uint32_t uint_cpy = uint;
     ip->first8 = (uint8_t)(uint_cpy>>24);
     uint_cpy = uint;
