@@ -147,7 +147,8 @@ FTEntry* findEntryByIp(ForwardingTable* ft, IPAddress* ip){
         //because the first node in ft is a dummy. Also note, if it breaks without found_fte
         //being set - then we didnt find find_fte
         curr = curr->next;
-        if(ipcmp_host(ip, curr->ip) == 0){                                      //if this forwarding table entry matches the given ip
+        int8_t ipcmp = ipcmp_host(ip, curr->ip);
+        if(ipcmp == 0){                                      //if this forwarding table entry matches the given ip
             if(curr->next != NULL && ipcmp_host(ip, curr->next->ip) == 0){      //check the next one. if it exists, and also matches, 
                                                                                 //then it will be a better match (192.168.0.0/16 comes before 192.168.0.0/24)
                 continue;                                                       //so we continue
@@ -156,6 +157,9 @@ FTEntry* findEntryByIp(ForwardingTable* ft, IPAddress* ip){
                 found_fte = curr;
                 break;
             }
+        }
+        else if(ipcmp < 0){ //if we are past all possible matches, an ip can never have a prefix match that is greater than it (prefix is always less than the ip)
+            break;
         }
     }
     return found_fte;
@@ -181,43 +185,20 @@ void routePacket(ForwardingTable* ft, NICTable* nt, IPAddress* ip, uint32_t pack
  *  Same as strcmp, but for ips, in that
  *
  *   A zero value indicates that both ips are equal.
- *   A value greater than zero indicates that the first byte that does not match has a greater value in str1 than in str2; And a value less than zero indicates the opposite.
+ *   A value greater than zero indicates that ipOne is greater than ipTwo; And a value less than zero indicates the opposite.
  *
  */
 int ipcmp_prefix(IPAddress* ipOne, IPAddress* ipTwo){
-    if(ipOne->first8 > ipTwo->first8){
-        return 1;
-    }
-    else if(ipOne->first8 < ipTwo->first8){
-        return -1;
-    }
-    if(ipOne->second8 > ipTwo->second8){
-        return 1;
-    }
-    else if(ipOne->second8 < ipTwo->second8){
-        return -1;
-    }
-    if(ipOne->third8 > ipTwo->third8){
-        return 1;
-    }
-    else if(ipOne->third8 < ipTwo->third8){
+    uint32_t ipOneAsUint = iptouint(ipOne);
+    uint32_t ipTwoAsUint = iptouint(ipTwo);
+    if(ipOneAsUint == ipTwoAsUint){
         return 0;
     }
-    if(ipOne->fourth8 > ipTwo->fourth8){
+    else if(ipOneAsUint > ipTwoAsUint){
         return 1;
-    }
-    else if(ipOne->fourth8 < ipTwo->fourth8){
-        return 0;
-    }
-    
-    if(ipOne->prefix_len > ipTwo->prefix_len){
-        return 1;
-    }
-    else if(ipOne->prefix_len < ipTwo->prefix_len){
-        return -1;
     }
     else{
-        return 0;
+        return -1;
     }
 }
 /*
@@ -232,10 +213,19 @@ int ipcmp_host(IPAddress* host, IPAddress* ip_from_fte){ //host vs forward table
         mask+=pow(2, i);
     }
     mask = (mask<<(32-prefix_len));
+    printf("Prefix_len: %u mask: %u\n", prefix_len, mask);
+    
     uint32_t iptoformat = iptouint(host);
     iptoformat = iptoformat&mask;
     IPAddress* tmphost = uinttoip(iptoformat);
     tmphost->prefix_len = prefix_len;
+    printf("Comparing fte: ");
+    print_ip_prefix(ip_from_fte);
+    printf("with");
+    print_ip_host(host);
+    printf("masked as");
+    print_ip_prefix(tmphost);
+    printf("\n");
     return ipcmp_prefix(tmphost, ip_from_fte);
 }
 
@@ -247,7 +237,6 @@ uint32_t iptouint(IPAddress* ip){
     ipasuint += (ip->fourth8);
     return ipasuint;
 }
-
 IPAddress* uinttoip(uint32_t uint){
     IPAddress* ip = (IPAddress*)malloc(sizeof(IPAddress));
     uint32_t uint_cpy = uint;
@@ -260,7 +249,6 @@ IPAddress* uinttoip(uint32_t uint){
     ip->fourth8 = (uint8_t)(uint_cpy);
     return ip;
 }
-
 void print_ip_host(IPAddress* ip){
     printf(" %i.%i.%i.%i ", ip->first8, ip->second8, ip->third8, ip->fourth8);
 
